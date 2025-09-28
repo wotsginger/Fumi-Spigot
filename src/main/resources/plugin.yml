@@ -1,0 +1,20 @@
+name: Fumi-Spigot
+version: '1.0-SNAPSHOT'
+main: club.sitmc.fumi.FumiSpigot
+api-version: '1.21'
+prefix: Fumi
+load: STARTUP
+authors: [ 上海应用技术大学Minecraft社 ]
+description: 致力于在不同消息平台间传递消息的信使o(*￣▽￣*)ブ
+website: https://www.sitmc.club/
+
+commands:
+  fumi:
+    description: 重载Fumi配置文件并尝试重新连接NATS服务器
+    usage: /fumi reload
+    permission: fumi.reload
+
+permissions:
+  fumi.reload:
+    description: 重载Fumi配置文件并尝试重新连接NATS服务器
+    default: op
