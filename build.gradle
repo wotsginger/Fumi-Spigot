@@ -1,57 +1,35 @@
 plugins {
     id 'java'
-    id("xyz.jpenilla.run-paper") version "2.3.1"
-    id("com.github.johnrengelman.shadow") version "8.1.1"
+    id "xyz.jpenilla.run-paper" version "2.3.1"
+    id "com.github.johnrengelman.shadow" version "8.1.1"
 }
 
 group = 'club.sitmc'
-version = '1.0-SNAPSHOT'
+version = '1.0'
 
 repositories {
     mavenCentral()
-    maven {
-        name = "spigotmc-repo"
-        url = "https://hub.spigotmc.org/nexus/content/repositories/snapshots/"
-    }
-    maven {
-        name = "papiexpansion"
-        url = "https://repo.extendedclip.com/content/repositories/placeholderapi/"
-    }
+    maven { url = "https://hub.spigotmc.org/nexus/content/repositories/snapshots/" }
+    maven { url = "https://repo.extendedclip.com/content/repositories/placeholderapi/" }
 }
 
 dependencies {
-    // Spigot API
     compileOnly("org.spigotmc:spigot-api:1.21.1-R0.1-SNAPSHOT")
-
-    // PlaceholderAPI
     compileOnly("me.clip:placeholderapi:2.11.6")
 
-    // NATS 客户端（打包进插件）
     implementation("io.nats:jnats:2.16.8")
-
-    // JSON 库 (提供 JSONObject，打包进插件)
     implementation("org.json:json:20231013")
-}
-
-tasks {
-    runServer {
-        minecraftVersion("1.21")
-    }
 }
 
 def targetJavaVersion = 21
 java {
-    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
-    sourceCompatibility = javaVersion
-    targetCompatibility = javaVersion
-    if (JavaVersion.current() < javaVersion) {
-        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(targetJavaVersion)
     }
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
-
     if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
         options.release.set(targetJavaVersion)
     }
@@ -66,6 +44,16 @@ processResources {
     }
 }
 
-tasks.build {
-    dependsOn tasks.clean
+// 修正后的 ShadowJar 配置
+shadowJar {
+    archiveClassifier.set('')
+    // 将依赖打包进 Jar
+    mergeServiceFiles()
+}
+
+// 关联任务
+build.dependsOn(shadowJar)
+
+runServer {
+    minecraftVersion("1.21.1")
 }

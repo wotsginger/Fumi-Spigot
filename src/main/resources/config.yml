@@ -1,8 +1,9 @@
 nats:
-  url: "nats://localhost:4222"
-  subject: "minecraft.chat"
+  url: "nats://web.sitmc.club:4222"
+  token: ""
+  subject: "minecraft"
 
 minecraft:
-  source-name: "MyServer"
-  chat-format: "&7[{source}] &f{username}: &e{message}"
+  source-name: "minecraft"
+  chat-format: "&e[{source}] {username}: {message}"
   forward-player-chat: true

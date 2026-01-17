@@ -8,7 +8,6 @@ public final class FumiSpigot extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        // 初始化并启动 NATS 聊天桥
         natsChatBridge = new NatsChatBridge(this);
         natsChatBridge.enable();
 

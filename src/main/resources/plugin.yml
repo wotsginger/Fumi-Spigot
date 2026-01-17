@@ -1,5 +1,5 @@
 name: Fumi-Spigot
-version: '1.0-SNAPSHOT'
+version: '1.0'
 main: club.sitmc.fumi.FumiSpigot
 api-version: '1.21'
 prefix: Fumi

@@ -19,10 +19,12 @@ public class NatsChatBridge implements Listener {
 
     private final FumiSpigot plugin;
     private Connection natsConnection;
+    private Dispatcher dispatcher; // 保存 Dispatcher
     private String subject;
     private String chatFormat;
     private boolean forwardPlayerChat;
     private String sourceName;
+    private String natsToken;
 
     public NatsChatBridge(FumiSpigot plugin) {
         this.plugin = plugin;
@@ -33,7 +35,7 @@ public class NatsChatBridge implements Listener {
         setupDefaultConfig();
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
         loadConfigValues();
-        connectToNatsWithRetry(plugin.getConfig().getString("nats.url"));
+        connectToNatsWithRetry();
 
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             new NatsPlaceholderExpansion(this).register();
@@ -42,29 +44,20 @@ public class NatsChatBridge implements Listener {
     }
 
     public void disable() {
-        try {
-            if (natsConnection != null) {
-                natsConnection.close();
-            }
-        } catch (Exception e) {
-            plugin.getLogger().severe("Error closing NATS connection: " + e.getMessage());
-        }
+        disconnectNats();
     }
 
     public void reload() {
         plugin.reloadConfig();
         loadConfigValues();
-        if (natsConnection != null) {
-            try {
-                natsConnection.close();
-            } catch (Exception ignored) {}
-        }
-        connectToNatsWithRetry(plugin.getConfig().getString("nats.url"));
+        disconnectNats(); // 断开原有连接和订阅
+        connectToNatsWithRetry(); // 重新连接
     }
 
     private void setupDefaultConfig() {
         FileConfiguration config = plugin.getConfig();
         config.addDefault("nats.url", "nats://localhost:4222");
+        config.addDefault("nats.token", ""); // 新增 token
         config.addDefault("nats.subject", "minecraft.chat");
         config.addDefault("minecraft.source-name", "minecraft");
         config.addDefault("minecraft.chat-format", "&7[{source}] &f{username}: &e{message}");
@@ -79,23 +72,32 @@ public class NatsChatBridge implements Listener {
         chatFormat = ChatColor.translateAlternateColorCodes('&', config.getString("minecraft.chat-format"));
         forwardPlayerChat = config.getBoolean("minecraft.forward-player-chat");
         sourceName = config.getString("minecraft.source-name", "minecraft");
+        natsToken = config.getString("nats.token", "");
         plugin.getLogger().info("Loaded config: subject=" + subject + ", chatFormat=" + chatFormat +
-                ", forwardPlayerChat=" + forwardPlayerChat + ", sourceName=" + sourceName);
+                ", forwardPlayerChat=" + forwardPlayerChat + ", sourceName=" + sourceName + ", token=" + (natsToken.isEmpty() ? "none" : "****"));
     }
 
-    private void connectToNatsWithRetry(String url) {
+    private void connectToNatsWithRetry() {
+        disconnectNats(); // 确保旧连接已断开
+
+        String url = plugin.getConfig().getString("nats.url");
         int maxRetries = 5;
+
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 plugin.getLogger().info("Connecting to NATS (attempt " + attempt + "/" + maxRetries + "): " + url);
-                Options options = new Options.Builder()
+
+                Options.Builder builder = new Options.Builder()
                         .server(url)
-                        .connectionTimeout(Duration.ofSeconds(3))
-                        .build();
+                        .connectionTimeout(Duration.ofSeconds(3));
 
-                natsConnection = Nats.connect(options);
+                if (!natsToken.isEmpty()) {
+                    builder.token(natsToken);
+                }
 
-                Dispatcher dispatcher = natsConnection.createDispatcher(msg -> {
+                natsConnection = Nats.connect(builder.build());
+
+                dispatcher = natsConnection.createDispatcher(msg -> {
                     String raw = new String(msg.getData(), StandardCharsets.UTF_8);
                     Bukkit.getScheduler().runTask(plugin, () -> handleIncomingMessage(raw));
                 });
@@ -113,7 +115,22 @@ public class NatsChatBridge implements Listener {
                 }
             }
         }
-        plugin.getLogger().severe("Could not connect to NATS after " + maxRetries + " attempts. Giving up.");
+        plugin.getLogger().severe("Could not connect to NATS after " + maxRetries + " attempts.");
+    }
+
+    private void disconnectNats() {
+        try {
+            if (dispatcher != null) {
+                dispatcher.unsubscribe(subject);
+                dispatcher = null;
+            }
+            if (natsConnection != null) {
+                natsConnection.close();
+                natsConnection = null;
+            }
+        } catch (Exception e) {
+            plugin.getLogger().severe("Error disconnecting NATS: " + e.getMessage());
+        }
     }
 
     private void handleIncomingMessage(String raw) {
@@ -123,9 +140,7 @@ public class NatsChatBridge implements Listener {
             String username = json.optString("username");
             String message = json.optString("message");
 
-            // 过滤来自本服务器的消息
             if (sourceName.equalsIgnoreCase(source)) return;
-
             if (username.isEmpty() || message.isEmpty()) return;
 
             String formatted = chatFormat
